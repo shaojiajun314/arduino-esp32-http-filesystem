@@ -1,8 +1,8 @@
 #include "FS.h"
 #include <SPI.h>
-#include <WiFi.h>              // Built-in
+#include <WiFi.h> 
 #include <SPIFFS.h>
-#include <ESP32WebServer.h>    // https://github.com/Pedroalbuquerque/ESP32WebServer download and place in your Libraries folder
+#include <ESP32WebServer.h>
 #include <cassert>
 
 class FSServer {

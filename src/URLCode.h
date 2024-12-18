@@ -10,11 +10,11 @@ private:
     char dec2hex(short int c);
     int hex2dec(char c);
 public:
-    String urlcode; // URL 编码后
-    String strcode; // URL 编码前
-    void urlencode();   // 编码URL
-    void urldecode();   // 解码URL
-    void wdtFeed();     // 喂看门狗
+    String urlcode;
+    String strcode;
+    void urlencode();
+    void urldecode();
+    void wdtFeed();
 
 };
 
