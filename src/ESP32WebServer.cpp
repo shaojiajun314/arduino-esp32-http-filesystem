@@ -480,7 +480,7 @@ String ESP32WebServer::_responseCodeToString(int code) {
     case 206: return F("Partial Content");
     case 300: return F("Multiple Choices");
     case 301: return F("Moved Permanently");
-    case 302: return F("Found");
+    case 302: return F("Moved Temporarily");
     case 303: return F("See Other");
     case 304: return F("Not Modified");
     case 305: return F("Use Proxy");

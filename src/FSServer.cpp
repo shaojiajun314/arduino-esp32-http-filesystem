@@ -2,12 +2,12 @@
 #include <URLCode.h>
 
 
-String renderHTML(String body) {
-	return "<!DOCTYPE html><html lang=\"zh-CN\"><head><meta charset=\"UTF-8\"><title>file system</title></head><body><h1>Directory listing for /</h1><hr><ul>" + body + "</ul><hr></body></html>";
+String renderHTML(String body, String path) {
+	return "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"UTF-8\"><title>file system</title></head><body><h1>Directory listing for " + path + "</h1><hr><ul>" + body + "</ul><hr>  <h3 style='margin-top: 50px'>Select File to Upload</h3><form action='/upload?path=" + path + "' method='post' enctype='multipart/form-data'><input class='buttons' style='width:40%' type='file' name='upload' id='upload' value='' required><br><br><button class='buttons' style='width:10%' type='submit'>Upload File</button><br></form>  </body></html>";
 };
 
-String renderA(String data, String url) {
-	return "<li><a href=\"" + url + "\">" + data + "</a></li>";
+String renderA(String data, String url, bool isFile=true) {
+	return "<li><a href=\"" + url + "\">" + data + "</a>" + (!isFile?"":("<form style='display: inline; margin-left: 20px;' action='/delete' method='post'><input type='hidden' name='filename' value='" + url + "'><button class='buttons' style='width:10%' type='submit'>delete</button></form>")) + "</li>";
 };
 
 ESP32WebServer* server = nullptr;
@@ -49,8 +49,7 @@ void FSServer::handleClient() {
 	server->handleClient();
 };
 
-void list(){
-  Serial.println();
+void handleFileList(){
   String uri = server->uri();
   URLCode url;
   url.urlcode = uri;
@@ -66,15 +65,12 @@ void list(){
   String filename = root + uri;
   File fileDir = SPIFFS.open(filename);
 
-  Serial.print("list filedir: ");
-  Serial.println(filename);
-
   if (!fileDir) {
   	return;
   }
   if (fileDir.isDirectory()) {
   	int rootLength = filename.length();
-  	Serial.println(filename.length());
+  	// Serial.println(filename.length());
   	if (filename != "/") {
   		rootLength = rootLength + 1;
 	  }
@@ -85,28 +81,14 @@ void list(){
     while (file) {
     	String p = file.path();
     	String fileN = file.name();
-
-    	Serial.println(rootLength);
-
     	String splitedHeadPath = p.substring(rootLength, p.length());
-
-    	Serial.print("path: ");
-    	Serial.print(p);
-    	Serial.print(" fileName: ");
-    	Serial.print(fileN);
-    	Serial.print(" pathIndex: ");
-    	Serial.println(splitedHeadPath);
-
     	if (splitedHeadPath == fileN) {
-      	resp += renderA(fileN + " (" + String(file.size() / 1024) + "KB)", p) + "</br>";
+    		int sizeKB = file.size() / 1024;
+      		resp += renderA(fileN + " (" + (sizeKB>0?(String(sizeKB) + "KB)"):(String(file.size()) + "B)")), p) + "</br>";
     	} else {
     		String dir = splitedHeadPath.substring(0, splitedHeadPath.indexOf("/"));
-
-    		Serial.print("dir: ");
-    		Serial.println(dir);
-
     		if (CachFiles.indexOf("," + dir + ",") < 0) {
-    			resp += renderA(dir, filename + dir) + "</br>";
+    			resp += renderA(dir, filename + dir, false) + "</br>";
     			CachFiles += dir + ",";
     		}
     	}
@@ -117,7 +99,7 @@ void list(){
     server->sendHeader("Content-Type", "text/html"); 
     server->sendHeader("Pragma", "no-cache"); 
     server->sendHeader("Expires", "-1");
-    resp = renderHTML(resp);
+    resp = renderHTML(resp, filename);
     server->setContentLength(resp.length()); 
     server->send(200, "text/html", ""); 
     server->sendContent(resp);
@@ -128,7 +110,83 @@ void list(){
   server->sendHeader("Connection", "close");
   server->streamFile(fileDir, "application/octet-stream");
   fileDir.close();
+};
+
+String getRedirectLocation(String filename) {
+	String path = "";
+	int i = filename.indexOf("/");
+	while (i >= 0) {
+		path += filename.substring(0, i+1);
+		filename = filename.substring(i+1, filename.length());
+		i = filename.indexOf("/");
+	}
+	if (path == "") {
+		path = "/";
+	}
+	return path;
+};
+
+String getFileABSPath(String filename, String prePath="") {
+	if(filename.startsWith("/")) {
+		filename = filename.substring(1, filename.length());
+	}
+	if (!prePath.endsWith("/")) {
+		prePath = prePath + "/";
+	}
+	filename = prePath + filename;
+	if(!filename.startsWith("/")) {
+		filename = "/" + filename;
+	}
+	return filename;
+};
+
+File UploadFile; 
+void handleFileUpload() {
+	HTTPUpload& uploadfile = server->upload();
+	String filename = uploadfile.filename;
+	String path = server->arg("path");
+	filename = getFileABSPath(filename, path);
+	Serial.print("Upload File Name: ");
+	Serial.println(filename);
+	if(uploadfile.status == UPLOAD_FILE_START) {
+		SPIFFS.remove(filename);
+		UploadFile = SPIFFS.open(filename, FILE_WRITE);
+	} else if (uploadfile.status == UPLOAD_FILE_WRITE) {
+		if (uploadfile.currentSize == 0) {
+			SPIFFS.remove(filename);
+			Serial.println("size 0");
+			server->sendHeader("Location", getRedirectLocation(filename)); 
+			server->send(302);
+			return;
+		}
+		if(UploadFile) UploadFile.write(uploadfile.buf, uploadfile.currentSize); // Write the received bytes to the file
+	} else if (uploadfile.status == UPLOAD_FILE_END) {
+		if(UploadFile){                                    
+			UploadFile.close();
+			
+			Serial.print("Upload Size: ");
+			Serial.println(uploadfile.totalSize);
+			
+			server->sendHeader("Location", getRedirectLocation(filename)); 
+			server->send(302);
+		} else {
+			Serial.println("error todo");
+			server->send(400);
+		}
+	}
 }
+
+void handleFileDelete() {
+	String filename = server->arg("filename");
+	// filename = getFileABSPath(filename);
+
+	Serial.print("filename: ");
+	Serial.println(filename);
+
+	SPIFFS.remove(filename);
+	server->sendHeader("Location", getRedirectLocation(filename)); 
+	server->send(302);
+};
 
 void FSServer::runSPIFFS(int port, const char* r) {
 	Serial.print(F("Initializing SPIFFS ...")); 
@@ -146,9 +204,16 @@ void FSServer::runSPIFFS(int port, const char* r) {
 	if (!root.endsWith("/")) {
 		root += "/";
 	}
+
+	if(SPIFFS.exists("/")) {
+		SPIFFS.remove("/"); // clear
+	}
+
 	server = new ESP32WebServer(port);
 
-	server->onNotFound(list);
+	server->on("/upload",  HTTP_POST, [](){ server->send(200);}, handleFileUpload);
+	server->on("/delete",  HTTP_POST, handleFileDelete);
+	server->onNotFound(handleFileList);
 	server->begin();
 	Serial.println("HTTP server started");
 	Serial.print("listening: ");
