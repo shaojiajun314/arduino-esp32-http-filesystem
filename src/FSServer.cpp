@@ -20,6 +20,7 @@ FSServer::~FSServer() {
 };
 
 void FSServer::begin(const char* ssid, const char* password) {
+	WiFi.mode(WIFI_STA);
 	int status = WiFi.begin(ssid, password);
 	while (
 		!(
