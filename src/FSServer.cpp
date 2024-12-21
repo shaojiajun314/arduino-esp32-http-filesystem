@@ -1,6 +1,7 @@
 #include "FSServer.h"
 #include <URLCode.h>
 
+EVENT_CALLBACK eventCallback;
 
 String renderHTML(String body, String path) {
 	return "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"UTF-8\"><title>file system</title></head><body><h1>Directory listing for " + path + "</h1><hr><ul>" + body + "</ul><hr>  <h3 style='margin-top: 50px'>Select File to Upload</h3><form action='/upload?path=" + path + "' method='post' enctype='multipart/form-data'><input class='buttons' style='width:40%' type='file' name='upload' id='upload' value='' required><br><br><button class='buttons' style='width:10%' type='submit'>Upload File</button><br></form>  </body></html>";
@@ -44,6 +45,10 @@ void FSServer::begin(const char* ssid, const char* password) {
 		Serial.println(status);
 		assert(false);
 	}
+};
+
+void FSServer::setCallback(EVENT_CALLBACK cb) {
+	eventCallback = cb;
 };
 
 void FSServer::handleClient() {
@@ -104,6 +109,9 @@ void handleFileList(){
     server->setContentLength(resp.length()); 
     server->send(200, "text/html", ""); 
     server->sendContent(resp);
+    if (eventCallback) {
+  		eventCallback(fileDir.path(), VIEW_PATH_EVENT);
+  	}
     return;
   }
   server->sendHeader("Content-Type", "text/text");
@@ -111,6 +119,9 @@ void handleFileList(){
   server->sendHeader("Connection", "close");
   server->streamFile(fileDir, "application/octet-stream");
   fileDir.close();
+  if (eventCallback) {
+  	eventCallback(fileDir.path(), DOWNLOAD_EVENT);
+  }
 };
 
 String getRedirectLocation(String filename) {
@@ -167,7 +178,9 @@ void handleFileUpload() {
 			
 			Serial.print("Upload Size: ");
 			Serial.println(uploadfile.totalSize);
-			
+			if (eventCallback) {
+	  		eventCallback(filename, UPLOAD_EVENT);
+	  	}
 			server->sendHeader("Location", getRedirectLocation(filename)); 
 			server->send(302);
 		} else {
@@ -187,6 +200,7 @@ void handleFileDelete() {
 	SPIFFS.remove(filename);
 	server->sendHeader("Location", getRedirectLocation(filename)); 
 	server->send(302);
+	eventCallback(filename, DELETE_EVENT);
 };
 
 void FSServer::runSPIFFS(int port, const char* r) {
