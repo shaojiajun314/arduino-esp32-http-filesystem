@@ -158,9 +158,9 @@ void handleFileUpload() {
 	String filename = uploadfile.filename;
 	String path = server->arg("path");
 	filename = getFileABSPath(filename, path);
-	Serial.print("Upload File Name: ");
-	Serial.println(filename);
 	if(uploadfile.status == UPLOAD_FILE_START) {
+		Serial.print("Upload File Name: ");
+		Serial.println(filename);
 		SPIFFS.remove(filename);
 		UploadFile = SPIFFS.open(filename, FILE_WRITE);
 	} else if (uploadfile.status == UPLOAD_FILE_WRITE) {
@@ -169,6 +169,7 @@ void handleFileUpload() {
 			Serial.println("size 0");
 			server->sendHeader("Location", getRedirectLocation(filename)); 
 			server->send(302);
+			if(UploadFile) {UploadFile.close();}
 			return;
 		}
 		if(UploadFile) UploadFile.write(uploadfile.buf, uploadfile.currentSize); // Write the received bytes to the file
